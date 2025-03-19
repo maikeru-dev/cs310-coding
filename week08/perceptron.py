@@ -8,9 +8,10 @@ class Perceptron(object):
     # is created. It can be used to initialize #
     # the attributes of the class.             #
     # ==========================================#
-    def __init__(self, no_inputs, max_iterations=20, learning_rate=0.1):
-        self.no_inputs = no_inputs
-        self.weights = np.ones(no_inputs + 1) / (no_inputs + 1)
+    def __init__(self, n_classes, n_features, max_iterations=20, learning_rate=0.1):
+        self.n_classes = n_classes
+        self.n_features = n_features
+        self.weights = np.ones((n_classes, n_features + 1)) / (n_features + 1)
         self.max_iterations = max_iterations
         self.learning_rate = learning_rate
 
@@ -18,7 +19,8 @@ class Perceptron(object):
     # Prints the details of the perceptron. #
     # =======================================#
     def print_details(self):
-        print("No. inputs:\t" + str(self.no_inputs))
+        print("Number of classes:\t" + str(self.n_classes))
+        print("Number of features:\t" + str(self.n_features))
         print("Max iterations:\t" + str(self.max_iterations))
         print("Learning rate:\t" + str(self.learning_rate))
 
@@ -27,8 +29,8 @@ class Perceptron(object):
     # set of inputs.                          #
     # =========================================#
     def predict(self, inputs):
-        linear_output = np.dot(inputs, self.weights)
-        return self._step(linear_output)
+        scores = np.dot(inputs, self.weights.T)
+        return np.argmax(scores)
 
     def _step(self, x):
         return 1 if x >= 0 else 0
@@ -41,7 +43,6 @@ class Perceptron(object):
         assert len(training_data) == len(labels)
         # For each sample there is a label
 
-        # Weights are defined. len(Weights) is the same as the number of inputs
         n_samples, n_features = training_data.shape
 
         # Add bias to the training data
@@ -49,18 +50,79 @@ class Perceptron(object):
 
         for _ in range(self.max_iterations):
             for i in range(n_samples):
-                print(self.weights)
-                # Produce scalar, a weight * input product
-                linear_output = np.dot(biased_data[i], self.weights)
+                predicted_class = self.predict(biased_data[i])
+                true_class = int(labels[i])
 
-                # Get the prediction
-                y_pred = self._step(linear_output)
-
-                # Update the weights
-                update = self.learning_rate * (labels[i] - y_pred)
-                self.weights += update * biased_data[i]
+                if predicted_class != true_class:
+                    self.weights[true_class] += self.learning_rate * \
+                        biased_data[i]
+                    self.weights[predicted_class] -= self.learning_rate * \
+                        biased_data[i]
 
         return
+
+    def batch_train(self, training_data, labels):
+        assert len(training_data) == len(labels)
+
+        n_samples, n_features = training_data.shape
+
+        # Add bias to the training data
+        biased_data = np.c_[np.ones(n_samples), training_data]
+
+        for _ in range(self.max_iterations):
+            # Initialize the gradient accumulator
+            gradient = np.zeros_like(self.weights)
+
+            # Accumulate the gradient for all samples
+            for i in range(n_samples):
+                predicted_class = self.predict(biased_data[i])
+                true_class = int(labels[i])
+
+                if predicted_class != true_class:
+                    gradient[predicted_class] -= biased_data[i] * 1
+                    gradient[true_class] += biased_data[i] * 1
+
+            # Compute the average gradient
+            gradient /= n_samples
+
+            # Update the weights using the average gradient
+            self.weights += self.learning_rate * gradient
+
+        return
+
+    def test_digit(self, testing_data, labels, digit):
+        assert len(testing_data) == len(labels)
+
+        # Filter samples where the true label matches the specified digit
+        digit_indices = np.where(labels == digit)[0]
+        digit_samples = testing_data[digit_indices]
+        digit_labels = labels[digit_indices]
+
+        digit_samples = np.c_[np.ones(len(digit_samples)), digit_samples]
+
+        if len(digit_samples) == 0:
+            print(f"No samples found for digit {digit}.")
+            return 0.0
+
+        accuracy = 0.0
+        n_samples = len(digit_samples)
+
+        for i in range(n_samples):
+            # Predict the label for the current sample
+            y_pred = self.predict(digit_samples[i])
+
+            # Check if the prediction matches the true label
+            accuracy += y_pred == digit_labels[i]
+
+            # Print the prediction and true label
+            print(
+                f"Sample {i + 1}: Predicted = {y_pred}, Actual = {digit_labels[i]}")
+
+        # Compute the accuracy for the specified digit
+        accuracy /= n_samples
+        print(f"Accuracy for digit {digit}: {accuracy:.2f}")
+
+        return accuracy
 
     # =========================================mi#
     # Tests the prediction on each element of #
@@ -75,13 +137,24 @@ class Perceptron(object):
 
         for i in range(n_samples):
             y_pred = self.predict(testing_data[i])
-            print("Predicted:\t" + str(y_pred) +
-                  "\tActual:\t" + str(labels[i]))
+            #            print("Predicted:\t" + str(y_pred) +
+            #      "\tActual:\t" + str(labels[i]))
             accuracy += y_pred == labels[i]
 
         accuracy /= n_samples
 
         print("Accuracy:\t" + str(accuracy))
+
+
+def visualize_weights_barplot(perceptron, class_idx):
+    weights = perceptron.weights[class_idx]
+
+    plt.figure(figsize=(28, 28))
+    plt.imshow(weights[1:].reshape(28, 28))
+    plt.title(f"Weights for Class {class_idx}")
+    plt.xlabel("Features and Bias")
+    plt.ylabel("Weight Value")
+    plt.show()
 
 
 def loadPreset(filePath):
